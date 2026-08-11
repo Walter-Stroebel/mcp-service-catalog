@@ -25,6 +25,39 @@ re-approval, no `.mcp.json` diff to review. One name can front an arbitrary,
 swappable set of backends, decided entirely by whoever controls
 `tools.json` on the machine actually running the server.
 
+## Why this fits a dev team's DTAP workflow
+
+This shape maps directly onto a concern most teams rolling out AI-assisted
+development already have: **the set of tools an AI assistant should be
+allowed to touch is different in Dev, Test, and Acceptance — and that
+difference is exactly a `tools.json` diff, not a re-plumbing of every
+developer's client config.**
+
+Concretely, in the DTA phases of DTAP:
+
+- **Dev**: a developer's local catalog can be wide open — local build/lint
+  commands, scratch HTTP calls to a locally-running service, a local LLM
+  for cheap/casual tasks. Nobody outside that machine is affected by how
+  permissive it is.
+- **Test**: the catalog for a shared test environment can be scoped down to
+  exactly the commands a CI/QA process needs the assistant to run —
+  triggering test suites, querying a test database, hitting a staging API —
+  without needing to touch the actual MCP client setup on every machine
+  that connects to it.
+- **Acceptance**: same idea, tightened further — an acceptance environment's
+  catalog can expose read-only or reporting-style tools only, so an AI
+  assistant helping with UAT can query state but can't accidentally mutate
+  it.
+
+Because every environment's server is approved under the *same stable
+name* by whichever MCP client connects to it (see below), a team can stand
+up one server per environment, each backed by an environment-appropriate
+`tools.json`, and never need developers to re-approve or reconfigure their
+client when they move between them or when the catalog for an environment
+changes. The catalog file becomes the actual unit of governance — reviewable,
+diffable, and owned by whoever owns that environment — instead of scattered
+per-developer client configuration nobody can audit centrally.
+
 ## Catalog format
 
 Each entry in `tools.json` has a `kind` that picks which invoker serves it:
