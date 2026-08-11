@@ -1,0 +1,100 @@
+[
+  {
+    "name": "add",
+    "description": "Adds two integers and returns the sum.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "a": { "type": "integer", "description": "First addend." },
+        "b": { "type": "integer", "description": "Second addend." }
+      },
+      "required": ["a", "b"]
+    },
+    "kind": "method",
+    "target": "nl.infcomtec.mcpservicecatalog.DemoBackend#add"
+  },
+  {
+    "name": "echo",
+    "description": "Returns the given text back unchanged.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "Text to echo back." }
+      },
+      "required": ["text"]
+    },
+    "kind": "method",
+    "target": "nl.infcomtec.mcpservicecatalog.DemoBackend#echo"
+  },
+  {
+    "name": "roll_dice",
+    "description": "Rolls a die with the given number of sides, returning a random result from 1 to sides.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "sides": { "type": "integer", "description": "Number of sides on the die." }
+      },
+      "required": ["sides"]
+    },
+    "kind": "method",
+    "target": "nl.infcomtec.mcpservicecatalog.DemoBackend#rollDice"
+  },
+  {
+    "name": "list_dir",
+    "description": "Lists files in a directory (demo of the process kind).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "dir": { "type": "string", "description": "Directory to list." }
+      },
+      "required": ["dir"]
+    },
+    "kind": "process",
+    "target": ["ls", "-la", "{dir}"]
+  },
+  {
+    "name": "ask_gemma",
+    "description": "Sends a prompt to the gemma-4-e4b model running in LM Studio on predator and returns its raw JSON response.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "prompt": { "type": "string", "description": "The user prompt to send." }
+      },
+      "required": ["prompt"]
+    },
+    "kind": "http",
+    "target": {
+      "url": "http://localhost:1234/v1/chat/completions",
+      "method": "POST",
+      "body": {
+        "model": "google/gemma-4-e4b",
+        "messages": [
+          { "role": "user", "content": "{prompt}" }
+        ]
+      }
+    }
+  },
+  {
+    "name": "ask_mistral",
+    "description": "Sends a prompt to the mistral:latest model running in Ollama on predator and returns its raw JSON response.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "prompt": { "type": "string", "description": "The user prompt to send." }
+      },
+      "required": ["prompt"]
+    },
+    "kind": "http",
+    "target": {
+      "url": "http://localhost:11434/api/chat",
+      "method": "POST",
+      "body": {
+        "model": "mistral:latest",
+        "stream": false,
+        "messages": [
+          { "role": "user", "content": "{prompt}" }
+        ]
+      }
+    }
+  }
+]
