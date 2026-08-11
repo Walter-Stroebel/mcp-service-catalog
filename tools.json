@@ -54,7 +54,7 @@
   },
   {
     "name": "ask_gemma",
-    "description": "Sends a prompt to the gemma-4-e4b model running in LM Studio on predator and returns its raw JSON response.",
+    "description": "Sends a prompt to a local gemma-4-e4b model running in LM Studio and returns its raw JSON response.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -76,7 +76,7 @@
   },
   {
     "name": "ask_mistral",
-    "description": "Sends a prompt to the mistral:latest model running in Ollama on predator and returns its raw JSON response.",
+    "description": "Sends a prompt to a local mistral:latest model running in Ollama and returns its raw JSON response.",
     "inputSchema": {
       "type": "object",
       "properties": {
