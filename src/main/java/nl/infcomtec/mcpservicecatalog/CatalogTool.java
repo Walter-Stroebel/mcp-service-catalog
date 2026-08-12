@@ -18,6 +18,7 @@ public class CatalogTool implements Tool<Map> {
         INVOKERS.put("method", new MethodInvoker());
         INVOKERS.put("process", new ProcessInvoker());
         INVOKERS.put("http", new HttpInvoker());
+        INVOKERS.put("launch", new LaunchInvoker());
     }
 
     private final CatalogEntry entry;

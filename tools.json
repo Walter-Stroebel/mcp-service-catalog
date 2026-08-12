@@ -53,6 +53,35 @@
     "target": ["ls", "-la", "{dir}"]
   },
   {
+    "name": "view_image",
+    "description": "Opens the given image file in the infimg viewer on this machine's desktop (fit-to-window, arbitrary rotation, zoom/pan) and returns immediately without waiting for the window to close. Optionally target one of infimg's 10 remembered window-position slots (0-9), e.g. to keep a fixed monitoring/alert layout.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "file": { "type": "string", "description": "Path to the image file to open." },
+        "slot": { "type": "integer", "minimum": 0, "maximum": 9, "description": "Window-position slot (0-9) to open into. Omit for the default slot 0." }
+      },
+      "required": ["file"]
+    },
+    "kind": "launch",
+    "target": ["/home/walter/github/infimg/scripts/infimg.sh", "-{slot}", "{file}"]
+  },
+  {
+    "name": "view_image_data",
+    "description": "Opens an uploaded image (base64-encoded) in the infimg viewer on this machine's desktop and returns immediately without waiting for the window to close. Useful for showing a snapshot or alert image that only exists in-memory on the caller's side, e.g. a monitoring/bridge station. Optionally target one of infimg's 10 remembered window-position slots (0-9).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "image_data": { "type": "string", "description": "Base64-encoded image bytes." },
+        "image_ext": { "type": "string", "description": "File extension for the image, without the dot (e.g. \"png\", \"jpg\"). Defaults to \"png\"." },
+        "slot": { "type": "integer", "minimum": 0, "maximum": 9, "description": "Window-position slot (0-9) to open into. Omit for the default slot 0." }
+      },
+      "required": ["image_data"]
+    },
+    "kind": "launch",
+    "target": ["/home/walter/github/infimg/scripts/infimg.sh", "-{slot}", "{uploaded_file}"]
+  },
+  {
     "name": "ask_gemma",
     "description": "Sends a prompt to a local gemma-4-e4b model running in LM Studio and returns its raw JSON response.",
     "inputSchema": {
