@@ -53,6 +53,35 @@
     "target": ["ls", "-la", "{dir}"]
   },
   {
+    "name": "identify_image",
+    "description": "Runs ImageMagick's `identify` on a previously uploaded file (see upload_file) and returns its format/size/etc. Demonstrates the file_id -> {file_path} flow: upload the image via PUT /files on this server's file service (port given as the second startup argument, default 8765), then call this tool with the returned file_id. File bytes never travel through MCP tool-call arguments — see MCP_VISION_BUG_REPORT.md.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "file_id": { "type": "string", "description": "file_id returned by a prior upload to this server's file service." }
+      },
+      "required": ["file_id"]
+    },
+    "kind": "process",
+    "target": ["identify", "{file_path}"]
+  },
+  {
+    "name": "convert_image",
+    "description": "Runs ImageMagick's `convert` on a previously uploaded file (see identify_image's description for the upload flow) with the given arguments (e.g. \"-resize 50%\"), and returns a new file_id for the result — download it via GET /files/{file_id} on this server's file service. File bytes never travel through MCP tool-call arguments or results.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "file_id": { "type": "string", "description": "file_id returned by a prior upload to this server's file service." },
+        "convert_args": { "type": "string", "description": "ImageMagick convert arguments, e.g. \"-resize 50%\" or \"-rotate 90\"." },
+        "output_ext": { "type": "string", "description": "File extension for the converted output, without the dot (e.g. \"png\", \"jpg\")." }
+      },
+      "required": ["file_id", "convert_args", "output_ext"]
+    },
+    "kind": "process",
+    "producesFile": true,
+    "target": ["sh", "-c", "convert '{file_path}' {convert_args} '{output_path}'"]
+  },
+  {
     "name": "view_image",
     "description": "Opens the given image file in the infimg viewer on this machine's desktop (fit-to-window, arbitrary rotation, zoom/pan) and returns immediately without waiting for the window to close. Optionally target one of infimg's 10 remembered window-position slots (0-9), e.g. to keep a fixed monitoring/alert layout.",
     "inputSchema": {
@@ -80,6 +109,37 @@
     },
     "kind": "launch",
     "target": ["/home/walter/github/infimg/scripts/infimg.sh", "-{slot}", "{uploaded_file}"]
+  },
+  {
+    "name": "look_at_image",
+    "description": "Sends an uploaded image (base64-encoded) to the local vision-capable gemma-4-e4b model running in LM Studio, along with a question, and returns its answer. Reasoning/thinking is disabled so the model answers directly instead of emitting a chain-of-thought preamble. NOTE: keep the base64 payload small (comfortably under ~5KB) — larger inline base64 arguments can stall the calling model's own response stream indefinitely before the tool call ever dispatches; see MCP_VISION_BUG_REPORT.md. Downscale/recompress the image client-side first if needed.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "image_data": { "type": "string", "description": "Base64-encoded image bytes." },
+        "image_ext": { "type": "string", "description": "File extension for the image, without the dot (e.g. \"png\", \"jpg\")." },
+        "question": { "type": "string", "description": "What to ask the model about the image." }
+      },
+      "required": ["image_data", "image_ext", "question"]
+    },
+    "kind": "http",
+    "target": {
+      "url": "http://localhost:1234/v1/chat/completions",
+      "method": "POST",
+      "body": {
+        "model": "gemma-vision",
+        "reasoning_effort": "none",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              { "type": "text", "text": "{question}" },
+              { "type": "image_url", "image_url": { "url": "data:image/{image_ext};base64,{image_data}" } }
+            ]
+          }
+        ]
+      }
+    }
   },
   {
     "name": "ask_gemma",

@@ -51,7 +51,9 @@ public class CatalogTool implements Tool<Map> {
         try {
             return invoker.invoke(entry, arguments);
         } catch (Exception e) {
-            throw new RuntimeException(e.getMessage(), e);
+            Throwable cause = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null
+                    ? e.getCause() : e;
+            throw new RuntimeException(cause.getClass().getSimpleName() + ": " + cause.getMessage(), cause);
         }
     }
 }

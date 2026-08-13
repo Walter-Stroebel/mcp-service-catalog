@@ -4,8 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.io.IOException;
-import java.io.PrintStream;
+import com.fasterxml.jackson.core.JsonProcessingException;
 
 /**
  * JSON-RPC 2.0 envelope/framing, per the spec (https://www.jsonrpc.org/specification) —
@@ -28,7 +27,13 @@ public class JsonRpc {
         return error;
     }
 
-    public static void sendResponse(PrintStream out, ObjectMapper mapper, JsonNode id, JsonNode result, JsonNode error) throws IOException {
+    /**
+     * Builds one JSON-RPC 2.0 response envelope and serializes it to a
+     * single line — transport-agnostic; the caller decides whether that
+     * line goes to stdout (stdio transport) or an HTTP response body
+     * (Streamable HTTP transport).
+     */
+    public static String responseString(ObjectMapper mapper, JsonNode id, JsonNode result, JsonNode error) {
         ObjectNode response = JsonNodeFactory.instance.objectNode();
         response.put("jsonrpc", "2.0");
         response.set("id", id);
@@ -37,7 +42,10 @@ public class JsonRpc {
         } else {
             response.set("result", result);
         }
-        out.println(mapper.writeValueAsString(response));
-        out.flush();
+        try {
+            return mapper.writeValueAsString(response);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

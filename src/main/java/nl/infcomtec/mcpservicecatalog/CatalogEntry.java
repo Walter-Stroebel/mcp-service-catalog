@@ -16,4 +16,15 @@ public class CatalogEntry {
     public ObjectNode inputSchema;
     public String kind;
     public JsonNode target;
+
+    /**
+     * For kind "process" only: when true, ProcessInvoker creates a fresh
+     * temp file before running the command, exposes its path to the
+     * target template as {output_path}, and — once the process exits —
+     * registers whatever ended up at that path with Main.FILES, appending
+     * the resulting file_id to the returned text. Lets a process-kind
+     * tool (e.g. an ImageMagick convert) hand back a downloadable result
+     * without ever base64-encoding it into the MCP response itself.
+     */
+    public boolean producesFile;
 }

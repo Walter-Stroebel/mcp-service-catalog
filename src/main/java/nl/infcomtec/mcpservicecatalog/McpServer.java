@@ -38,27 +38,38 @@ public class McpServer {
             if (line.trim().isEmpty()) {
                 continue;
             }
-            handleLine(line);
+            String response = handleLine(line);
+            if (response != null) {
+                out.println(response);
+                out.flush();
+            }
         }
     }
 
-    private void handleLine(String line) throws IOException {
+    /**
+     * Transport-agnostic core: parses one JSON-RPC message, dispatches it,
+     * and returns the response line to write back (or null for
+     * notifications/unrecognized-notifications, which get no reply). Used
+     * by both the stdio loop (run) and HttpMcpTransport's POST handler, so
+     * the two transports share every bit of protocol logic and differ only
+     * in how a message arrives and how the response line is delivered.
+     */
+    public String handleLine(String line) {
         JsonNode request;
         try {
             request = mapper.readTree(line);
         } catch (JsonProcessingException e) {
             // Per spec, a parse error's response id is Null: we can't trust
             // anything in a request we failed to parse, including its id.
-            JsonRpc.sendResponse(out, mapper, NullNode.getInstance(), null,
+            return JsonRpc.responseString(mapper, NullNode.getInstance(), null,
                     JsonRpc.makeError(JsonRpc.PARSE_ERROR, "Parse error: " + e.getOriginalMessage()));
-            return;
         }
         String method = request.path("method").asText();
         JsonNode idNode = request.get("id");
 
         if ("notifications/initialized".equals(method)) {
             // Notification: no id, no reply expected.
-            return;
+            return null;
         }
 
         ObjectNode params = request.has("params") && request.get("params").isObject()
@@ -80,9 +91,9 @@ public class McpServer {
 
         if (idNode == null) {
             // Notification for a method we don't recognize: silently ignore.
-            return;
+            return null;
         }
-        JsonRpc.sendResponse(out, mapper, idNode, result, error);
+        return JsonRpc.responseString(mapper, idNode, result, error);
     }
 
     private ObjectNode handleInitialize() {
