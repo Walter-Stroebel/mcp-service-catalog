@@ -67,7 +67,7 @@ DAMAGE: <brief comma-separated list of what you counted>
   `Front_cover.png` (12) — all pages an eyeballed spot-check agrees are
   visibly rougher than the median page.
 
-### The two failures — and a correction after digging in
+### The two failures, and two rounds of chasing one of them down
 
 **`85v_and_86r_(foldout).png` — HTTP 400 from LM Studio.** This file is
 93MB, roughly 2–6x every other page in the set — it's a fold-out, three
@@ -81,69 +81,67 @@ boundary**, not a defect.
 
 **`112r.png` — "no image was provided."** This one looked, mid-run, like
 a template-echo glitch (the model literally repeating the prompt's
-format instructions back). It wasn't. Retested it directly, 8 fresh
-attempts, same file, same upload-and-call path used throughout the run:
+format instructions back). It wasn't — but pinning down what it *was*
+took three attempts, each correcting the last, which is worth showing
+in full rather than cleaning up into a single tidy conclusion.
 
-```
-attempt 1: COUNT: 2
-attempt 2: NO_IMAGE
-attempt 3: COUNT: 3
-attempt 4: COUNT: 2
-attempt 5: COUNT: 4
-attempt 6: NO_IMAGE
-attempt 7: COUNT: 2
-attempt 8: COUNT: 12
-```
+**Round 1 — first retest, flawed.** Retested the failing page directly:
+8 fresh calls, same file, back-to-back, no delay between them. 2/8
+(25%) reproduced the "no image" claim. Concluded: a real, intermittent,
+page-triggered model failure.
 
-**2 of 8 retries (25%) reproduced the exact same failure**: the model
-claims no image was provided, on a request that demonstrably did carry
-the image (proven by the surrounding successful attempts on the
-identical file). This is a real, intermittent, reproducible attention/
-grounding failure in the underlying vision model (`gemma-4-e4b` via LM
-Studio, mmproj-based image encoding) — not a bug in this project's file
-service, HTTP transport, or `look_at_image` implementation, all of which
-correctly delivered the same bytes on every attempt, successful or not.
+**Round 2 — checked the "page-specific" claim, found it unsupported,
+overcorrected.** Walter looked at the actual page image directly and
+pushed back: `112r.png` is an ordinary, unremarkable manuscript text
+page, nothing visually distinct from neighbors like `111v.png`. Fair
+challenge — re-ran the same 8-call back-to-back probe against
+`111v.png` (a page with no prior failure) and got 2/4 (50%), an *even
+higher* rate. Concluded from that: the failure isn't page-specific at
+all, it's a general background failure rate of the model/serving stack,
+and every single call carries real spurious-failure risk regardless of
+content.
 
-Our first instinct was that something about this specific page —
-composition, contrast, a tokenization artifact — made it unusually
-prone to this failure. **Walter checked that instinct against the
-actual image and it doesn't hold up**: `112r.png` is an ordinary,
-unremarkable manuscript text page — dense marginal star/flower
-annotations, no fold, nothing visually distinct from its neighbors
-(e.g. `111v.png`). To test whether the failure was really page-specific
-or just generally stochastic, we ran the same 4-retry probe against
-`111v.png`, a page with no prior failure and no visible reason to
-expect one:
+**Round 3 — that conclusion doesn't survive scrutiny either.** Before
+locking that in, checked whether the retest calls actually matched the
+original run's conditions. They didn't, in two ways: the retest prompt
+was a shorter, retyped-from-memory version missing a clause from the
+original (`(e.g. stains, tears, holes, fading, discoloration, ink
+bleed-through, edge damage)`), and the retest calls fired back-to-back
+with no pacing, unlike the original run's naturally-spaced sequential
+loop. Fixed both — exact original prompt, 3s delay between calls — and
+re-ran 20 fresh calls against `111v.png`, the same page Round 2 had
+"shown" failing 50% of the time:
 
-```
-attempt 1: COUNT: 3
-attempt 2: I am sorry, but you have not provided a manuscript page
-           image for me to analyze...
-attempt 3: NO_IMAGE
-attempt 4: COUNT: 10
-```
+**0/20 failures (0%).**
 
-**2 of 4 (50%) — an even higher rate, on a page that had never failed
-before and looks like any other page in the set.** That settles it:
-this is not page-specific. It's a **general, non-trivial background
-failure rate of this model/serving stack** — plausibly a sampling- or
-inference-level issue (something in how the vision projector's output
-gets attended to during generation, independent of image content) rather
-than anything about a particular image. Any page can trigger it; the
-corpus-wide 0.5% observed in the full run understates the real
-per-request risk, since it's the result of a *single* attempt per page,
-not repeated sampling.
+That's not consistent with a real ~25-50% background rate on an
+otherwise-normal page. It's consistent with Round 1 and Round 2's
+back-to-back, prompt-mismatched retest methodology having triggered a
+*different* failure mode than whatever produced the single genuine
+failure in the original 213-page run — plausibly a load, timing, or
+KV-cache-state effect specific to firing the same request repeatedly in
+a tight loop, not something that reflects the risk of a normal,
+naturally-paced call.
 
-**Practical takeaway, revised**: don't treat this as a per-image
-property to watch for on "difficult" pages — treat every single call to
-`look_at_image` (or any tool built the same way against this
-model/stack) as having a real, non-negligible chance of a spurious
-"no image" response, independent of what's actually in the image. A
-production pipeline built on this pattern must retry on an
-unparseable/no-image response before treating a page as unscoreable;
-skipping that retry step would silently misrepresent a meaningful
-fraction of real requests as failures of the page rather than noise
-from the model.
+**Where this actually leaves it**: the "no image" failure is real — it
+demonstrably happened once, unprompted, in the original run — but our
+attempts to characterize its rate by hammering the same request
+repeatedly were themselves measuring something else. The honest
+current estimate of the single-attempt, naturally-paced failure rate is
+close to the original run's own figure: **~0.5% (1/213)**, not the
+25-50% two flawed retests suggested. We are explicitly *not* claiming
+0.5% is a precise, validated rate either — one occurrence in one run is
+a thin basis for a rate — only that it's a better-grounded estimate than
+either retest produced, and that repeated-rapid-retry is not a valid way
+to measure it with this stack.
+
+**Practical takeaway**: retry-on-parse-failure is still the right
+engineering default for any pipeline built on this pattern — a rare,
+unexplained failure mode is still worth handling gracefully. But don't
+generalize from a tight retry loop to "this happens constantly" without
+checking, the way we nearly did here — and don't trust a plausible-
+sounding root-cause story (ours, twice) without checking it against
+better-controlled evidence.
 
 ## What this validates
 
