@@ -97,6 +97,17 @@ spawned per client session. Full details, including *why* (a real
 investigated bug, not a hypothetical), are in `MANUAL.md` and
 `docs/archive/2026-08-13-look-at-image-hang.md`.
 
+**Load-tested, not just built**: after the file-service fix shipped,
+we stress-tested it against 239 real, large (up to 93MB) image files —
+a full page-scan set of the Voynich manuscript — running a genuine
+counting/extraction task (visible-damage counts per page) through
+`look_at_image` end to end. 99%+ structured-output success, 213 pages
+in 8.5 minutes, zero MCP-channel issues, on a single consumer GPU that
+barely registered load. Full methodology, results, and what we think
+this means for "do you actually need a cloud vision API for this task"
+are in
+[`docs/case-studies/2026-08-13-voynich-vision-stress-test.md`](docs/case-studies/2026-08-13-voynich-vision-stress-test.md).
+
 ## Build & run
 
 ```bash

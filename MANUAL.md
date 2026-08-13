@@ -298,6 +298,20 @@ project's general "trusted local config, keep it simple" stance — fine
 for personal/team-scale use, not something to expose without further
 hardening if usage patterns change.
 
+**Known gap: old temp directories aren't cleaned up on restart.** Each
+process start allocates a *new* temp directory; a *previous* run's
+directory (and everything uploaded to it) is simply abandoned on disk,
+not deleted — `FileService` has no way to know about or clean up a
+directory from a process that's already gone. Confirmed in practice: a
+heavy stress-test session (see
+`docs/case-studies/2026-08-13-voynich-vision-stress-test.md`) left
+4.5GB behind after a `systemctl restart`, requiring a manual `rm -rf` of
+the old directory. Fine to ignore for occasional personal use; worth a
+periodic manual sweep (`ls -la $TMPDIR/mcp-catalog-files-*`, delete
+anything not matching the current process) or a real fix (delete-on-
+startup, a systemd `ExecStartPre`, or an actual TTL) if this sees
+heavier or longer-running use.
+
 **No authentication beyond LAN-level trust.** The file service (like the
 HTTP MCP transport) binds `0.0.0.0` — anyone who can reach that port can
 upload/download any tracked `file_id`. This assumes the LAN itself is
