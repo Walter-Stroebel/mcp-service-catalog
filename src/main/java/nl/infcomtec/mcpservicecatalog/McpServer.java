@@ -9,8 +9,10 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintStream;
 import java.util.Map;
+import java.util.Properties;
 import java.util.TreeMap;
 
 /**
@@ -103,8 +105,31 @@ public class McpServer {
         capabilities.putObject("tools");
         ObjectNode serverInfo = result.putObject("serverInfo");
         serverInfo.put("name", "mcp-service-catalog");
-        serverInfo.put("version", "1.0");
+        serverInfo.put("version", projectVersion());
         return result;
+    }
+
+    /**
+     * Reads the real project version from the jar's own Maven-generated
+     * pom.properties (present in every build — see the release-artifact
+     * verification in docs/case-studies) rather than hardcoding it a
+     * second time in source, which is exactly how this string went stale
+     * (pom.xml moved from 1.0 to 1.2.0 while this stayed "1.0"). Falls
+     * back to "unknown" when run outside the packaged jar (e.g. from an
+     * IDE's target/classes), where pom.properties isn't generated.
+     */
+    private String projectVersion() {
+        try (InputStream in = McpServer.class.getResourceAsStream(
+                "/META-INF/maven/nl.infcomtec/mcp-service-catalog/pom.properties")) {
+            if (in == null) {
+                return "unknown";
+            }
+            Properties properties = new Properties();
+            properties.load(in);
+            return properties.getProperty("version", "unknown");
+        } catch (IOException e) {
+            return "unknown";
+        }
     }
 
     private ObjectNode handleToolsList() {

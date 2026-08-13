@@ -1,12 +1,70 @@
 name: Release
 
+# Triggers on every v*.*.* tag push, but that alone is NOT "this is a
+# release" — see the check-version job below and the comment on it.
+# Cargo-cult warning, learned the hard way (2026-08-13, mcp-service-catalog):
+# copying this "tag matches vX.Y.Z -> build+publish a Release" pattern
+# without a version-match guard means EVERY tag that happens to match
+# the pattern (a docs-only marker, a reference point, a typo) triggers a
+# full Build+Release run and publishes a GitHub Release with a jar
+# attached — even when nothing in the actual code changed since the last
+# real release. That's not free: it's a real CI runner (real compute,
+# real minutes), and across every repo that copies this exact pattern
+# uncritically (which this project's own release.yml originally did,
+# copied from another repo's template), it adds up to real, unexamined
+# infrastructure cost with zero benefit — a released artifact nobody
+# asked for, confirming nothing that wasn't already confirmed. Multiply
+# by however many repos on GitHub use this same boilerplate.
 on:
   push:
     tags:
       - 'v*.*.*'
 
 jobs:
+  check-version:
+    # A tag matching v*.*.* is necessary but not sufficient to mean "this
+    # is a real release." The actual signal this project uses: pom.xml's
+    # <version> was deliberately bumped to EXACTLY this tag's version
+    # (full X.Y.Z, e.g. tag v1.2.1 requires pom.xml <version>1.2.1</version>
+    # — every real release bumps it that way; docs-only/reference commits
+    # don't). A tag pushed without a matching full-version bump is treated
+    # as a plain reference marker, not a release request — the job below
+    # is skipped, no build, no CI minutes spent, no Release object created.
+    #
+    # Earlier version of this check compared only the tag's X.Y against
+    # pom.xml, which is why it didn't actually catch the incident this
+    # comment is about: pom.xml's <version> was "1.2" (no patch digit) at
+    # the time, so tags v1.2.0 AND the later, docs-only v1.2.1 both
+    # "matched" — the check couldn't tell them apart. Fixed by requiring
+    # pom.xml to carry the full three-part version and matching that
+    # exactly, so a real release always requires an explicit, exact
+    # version bump — no ambiguity, no docs-only tag can accidentally
+    # satisfy it.
+    runs-on: ubuntu-latest
+    outputs:
+      is_release: ${{ steps.compare.outputs.is_release }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - id: compare
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          POM_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+          echo "Tag: $GITHUB_REF_NAME -> expecting pom.xml version $TAG_VERSION, found $POM_VERSION"
+          if [ "$TAG_VERSION" = "$POM_VERSION" ]; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Tag $GITHUB_REF_NAME does not match pom.xml version ($POM_VERSION) exactly — treating as a reference tag, not a release. Skipping build+publish."
+          fi
+
   release:
+    needs: check-version
+    if: needs.check-version.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
