@@ -9,8 +9,23 @@ methods, CLI commands, or HTTP APIs (local LLM backends like LM Studio or
 Ollama included), without the client ever needing its own config touched
 or re-approved when the catalog changes.
 
+Any machine — a spare box, a real team server, or a throwaway
+container/VM standing in for one — becomes an MCP server just by dropping
+a `tools.json` next to this jar. Whatever that machine happens to have
+installed (ImageMagick, a GPU running a local LLM, a specific CLI tool, an
+internal script) becomes a tool every MCP client on the network can call,
+without anyone writing bespoke MCP server code — the barrier to exposing a
+tool drops from "implement the MCP protocol" to "write a JSON entry."
+Each server stays a standalone, individually-configured island on
+purpose: there's no discovery layer, and a user still adds each server
+they want to their own client's config by hand, the same way they'd
+choose to trust any other local process. See `MANUAL.md` for the full
+how-to (deploying a server, writing catalog entries, the file service,
+wiring up a client) — this README stays the pitch.
+
 No SDK dependency: implements the wire protocol directly — newline-delimited
-JSON-RPC 2.0 over stdin/stdout, the `initialize`/`initialized` handshake,
+JSON-RPC 2.0 over stdin/stdout (plus Streamable HTTP as a second, optional
+transport — see MANUAL.md), the `initialize`/`initialized` handshake,
 `tools/list`, `tools/call`. The official Java MCP SDK pulls in Project
 Reactor for a stdio JSON-RPC use case that doesn't need reactive-streams
 plumbing; this avoids that dependency entirely.
@@ -61,33 +76,41 @@ per-developer client configuration nobody can audit centrally.
 ## Catalog format
 
 Each entry in `tools.json` has a `kind` that picks which invoker serves it:
+**`method`** (calls a Java method via reflection), **`process`** (runs a
+command, captures stdout/stderr), **`http`** (proxies to a local or remote
+HTTP API, JSON request body included), or **`launch`** (starts a detached,
+long-running process without waiting for it). See `MANUAL.md` for the full
+format reference and worked examples of each, and `tools.json` in this
+repo for the real, currently-deployed catalog.
 
-- **`method`** — target is `fully.qualified.ClassName#methodName`, a public
-  static `String methodName(Map<String,Object>)`, called via reflection.
-- **`process`** — target is a JSON array of argv elements, each run through
-  `{argName}` template substitution, executed via `ProcessBuilder`.
-  stdout+stderr are captured as the result.
-- **`http`** — target is either a bare URL template (GET, no body) or an
-  object `{"url": ..., "method": "POST", "body": {...template...}}` whose
-  body's string leaves are template-filled recursively — this is what makes
-  it a real gateway rather than a toy: a single `http` entry can proxy an
-  MCP tool call straight through to any local or remote HTTP API, JSON
-  request body included. `tools.json` ships two examples hitting local
-  LM Studio and Ollama chat-completions endpoints.
+## File service and the two MCP transports
 
-See `tools.json` in this repo for working examples of all three kinds, and
-`CLAUDE.md` for the implementation notes (which class does what).
+Alongside the MCP protocol itself, the jar runs a small plain-HTTP file
+up/download service (`PUT`/`GET /files`) on its own port, so tool
+arguments and results never need to carry file bytes as inline base64 —
+a tool takes a `file_id` instead, the same upload-once/reference-by-handle
+pattern Anthropic's own Files API uses for the Messages API. It also
+speaks MCP over Streamable HTTP as well as the original stdio transport,
+so a machine can run as a genuine always-on, systemd-managed service
+reachable by multiple simultaneous clients, not only as a subprocess
+spawned per client session. Full details, including *why* (a real
+investigated bug, not a hypothetical), are in `MANUAL.md` and
+`docs/archive/2026-08-13-look-at-image-hang.md`.
 
 ## Build & run
 
 ```bash
 mvn package
-java -jar target/mcp-service-catalog-1.0-jar-with-dependencies.jar [path-to-tools.json]
+java -jar target/mcp-service-catalog-1.0-jar-with-dependencies.jar \
+    [path-to-tools.json] [file-service-port] [mcp-http-port]
 ```
 
-With no argument, it looks for `tools.json` next to the working directory.
-Wire it into an MCP client (e.g. Claude Code's `.mcp.json`) as a `stdio`
-server pointed at that command.
+All arguments are optional (defaults: `tools.json` next to the working
+directory, file service port `8765`, MCP-over-HTTP port `8764`). Wire it
+into an MCP client (e.g. Claude Code's `.mcp.json`) as a `stdio` server
+pointed at that command, or point an HTTP-capable client at
+`http://host:8764/mcp`. See `MANUAL.md` for both, plus a systemd unit
+example for always-on deployment.
 
 ## What this actually is, security-wise
 
@@ -139,5 +162,9 @@ requires, no MCP SDK.
 
 ## Status
 
-v1.0.0 — initial public release. Evolved from a toy learn-the-wire-protocol
-MCP server into this catalog-driven gateway.
+v1.0.0 was the initial public release: a toy learn-the-wire-protocol MCP
+server evolved into this catalog-driven gateway. Since then: a real
+file up/download service, a second (Streamable HTTP) transport
+alongside stdio, and `identify_image`/`convert_image` as a worked
+example of "one machine has a tool installed, every client can use it."
+See `MANUAL.md` for the current state of everything.
