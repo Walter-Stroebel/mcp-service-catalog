@@ -67,7 +67,7 @@ DAMAGE: <brief comma-separated list of what you counted>
   `Front_cover.png` (12) — all pages an eyeballed spot-check agrees are
   visibly rougher than the median page.
 
-### The two failures, and one worth digging into
+### The two failures — and a correction after digging in
 
 **`85v_and_86r_(foldout).png` — HTTP 400 from LM Studio.** This file is
 93MB, roughly 2–6x every other page in the set — it's a fold-out, three
@@ -103,19 +103,47 @@ grounding failure in the underlying vision model (`gemma-4-e4b` via LM
 Studio, mmproj-based image encoding) — not a bug in this project's file
 service, HTTP transport, or `look_at_image` implementation, all of which
 correctly delivered the same bytes on every attempt, successful or not.
-The elevated retry-failure rate for this specific page (25%) versus its
-one-off rate in the full run (1/213 ≈ 0.5%) suggests something about
-this particular image — composition, contrast, an artifact in how it
-tokenizes — makes it more prone to this failure than the corpus average,
-though the underlying mechanism wasn't investigated further (would
-require instrumenting LM Studio/llama.cpp internals, out of scope here).
 
-**Practical takeaway**: at the corpus level, the failure rate for this
-specific glitch was ~0.5% (1/213 in the full run). On a re-run of any
-one page, expect it to be higher for pages that trigger it at all — this
-is not a uniform per-page probability, it clusters. A production pipeline
-built on this pattern should retry on an unparseable/no-image response
-before treating a page as unscoreable.
+Our first instinct was that something about this specific page —
+composition, contrast, a tokenization artifact — made it unusually
+prone to this failure. **Walter checked that instinct against the
+actual image and it doesn't hold up**: `112r.png` is an ordinary,
+unremarkable manuscript text page — dense marginal star/flower
+annotations, no fold, nothing visually distinct from its neighbors
+(e.g. `111v.png`). To test whether the failure was really page-specific
+or just generally stochastic, we ran the same 4-retry probe against
+`111v.png`, a page with no prior failure and no visible reason to
+expect one:
+
+```
+attempt 1: COUNT: 3
+attempt 2: I am sorry, but you have not provided a manuscript page
+           image for me to analyze...
+attempt 3: NO_IMAGE
+attempt 4: COUNT: 10
+```
+
+**2 of 4 (50%) — an even higher rate, on a page that had never failed
+before and looks like any other page in the set.** That settles it:
+this is not page-specific. It's a **general, non-trivial background
+failure rate of this model/serving stack** — plausibly a sampling- or
+inference-level issue (something in how the vision projector's output
+gets attended to during generation, independent of image content) rather
+than anything about a particular image. Any page can trigger it; the
+corpus-wide 0.5% observed in the full run understates the real
+per-request risk, since it's the result of a *single* attempt per page,
+not repeated sampling.
+
+**Practical takeaway, revised**: don't treat this as a per-image
+property to watch for on "difficult" pages — treat every single call to
+`look_at_image` (or any tool built the same way against this
+model/stack) as having a real, non-negligible chance of a spurious
+"no image" response, independent of what's actually in the image. A
+production pipeline built on this pattern must retry on an
+unparseable/no-image response before treating a page as unscoreable;
+skipping that retry step would silently misrepresent a meaningful
+fraction of real requests as failures of the page rather than noise
+from the model.
 
 ## What this validates
 
