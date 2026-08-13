@@ -627,13 +627,22 @@ machinery — not done in this session, noted below.
   implicated in issue #86314 specifically (our stall was upstream of
   MCP dispatch entirely, so this is more relevant to understanding
   issue #55923's client-side rejection than our own root-caused issue).
-- Migrating `look_at_image` itself onto the new `FileService`/`file_id`
-  pattern (a `method`-kind tool reading `{file_id}` → `{file_path}` via
-  `ProcessInvoker`'s resolution logic, base64-encoding server-side just
-  before the LM Studio POST, same as the earlier reverted attempt — but
-  now with the DTAP-boundary problem actually solved, since the file was
-  uploaded to *predator's* `FileService` directly rather than assumed
-  to exist on predator's filesystem already).
+- ~~Migrating `look_at_image` itself onto the new `FileService`/`file_id`
+  pattern~~ — **done**, follow-up session same day: `look_at_image` is now
+  `kind: "method"`, target `DemoBackend#lookAtImage`, taking `file_id`
+  instead of inline `image_data`/`image_ext`. Resolves `file_id` through
+  `Main.FILES` (not `ProcessInvoker`'s resolution — this needed its own
+  `method`-kind implementation since `HttpInvoker` has no file-resolution
+  hook), reads + base64-encodes server-side, POSTs to LM Studio exactly
+  as the original `http`-kind entry did. Same shape as the earlier
+  reverted attempt, but now correct: the DTAP problem is actually solved
+  because the file is uploaded to *predator's* `FileService` first (via
+  its own `PUT /files`), not assumed to already exist on predator's
+  filesystem. Verified end-to-end on predator with the same alien-planet
+  JPEG used throughout this investigation: uploaded, `look_at_image`
+  called with just the returned `file_id`, LM Studio's gemma-vision model
+  returned a correct, detailed description. No base64 anywhere near the
+  MCP channel at any point.
 - No TTL/cleanup exists yet for `FileService`'s staged files or its temp
   directory — every upload and every `producesFile` output accumulates
   under `java.io.tmpdir` for the life of the process. Fine for now
