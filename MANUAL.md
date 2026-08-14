@@ -58,8 +58,12 @@ This starts three things in the same process:
   and still works unchanged.
 - **Always-on (systemd-managed)**: install it as a long-lived service so
   the machine is reachable over HTTP by anyone who knows its address,
-  independent of any one client's session lifetime. Example unit
-  (`~/.config/systemd/user/mcp-service-catalog.service`):
+  independent of any one client's session lifetime. Use a standard
+  root-level system unit (`/etc/systemd/system/mcp-service-catalog.service`)
+  rather than a `systemctl --user` unit — a user unit is invisible to a
+  plain `systemctl status`/`journalctl` and just fragments where service
+  state lives on the box for no real benefit on a single-user machine.
+  Example unit:
 
   ```ini
   [Unit]
@@ -75,12 +79,12 @@ This starts three things in the same process:
   StandardInput=null
 
   [Install]
-  WantedBy=default.target
+  WantedBy=multi-user.target
   ```
 
   ```bash
-  systemctl --user daemon-reload
-  systemctl --user enable --now mcp-service-catalog.service
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now mcp-service-catalog.service
   ```
 
   `StandardInput=null` documents the intent explicitly: this instance
@@ -226,6 +230,25 @@ request bodies like chat-completions calls.
   }
 }
 ```
+
+**Local LLM backend choice.** LM Studio and Ollama both work as `http`
+targets (as above), but each is an app-managed black box with its own
+model store, its own idea of when to load/unload weights, and its own
+CLI/GUI layer between you and the actual inference server. Building
+[llama.cpp](https://github.com/ggml-org/llama.cpp) directly and running
+`llama-server` as a plain systemd unit is a leaner alternative worth
+listing as an option: no vendor app in the loop, the model is pinned
+loaded (no per-request cold-start), and the OpenAI-compatible
+`/v1/chat/completions` endpoint it exposes is a drop-in replacement for
+either — same `kind: "http"` shape as above, just point `url` at
+`llama-server`'s port instead of LM Studio's/Ollama's. Gemma-4's
+chat template has a baked-in chain-of-thought toggle: pass
+`--reasoning off` on `llama-server`'s command line (not
+`--reasoning-budget 0`, which relabels the output field without actually
+suppressing the reasoning tokens) to get direct answers instead of a
+verbose `<|channel>thought...` preamble on every call. Note VRAM is
+still a hard constraint either way — a small GPU may not fit two models
+loaded simultaneously regardless of which backend serves them.
 
 **Keep string arguments small.** A model generating a large string as
 tool-call input (a multi-KB blob) can stall its own response stream —

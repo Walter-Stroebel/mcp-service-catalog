@@ -127,7 +127,7 @@
   },
   {
     "name": "ask_gemma",
-    "description": "Sends a prompt to a local gemma-4-e4b model running in LM Studio and returns its raw JSON response.",
+    "description": "Sends a prompt to the local gemma-4-e4b model running in llama.cpp's llama-server (reasoning/CoT disabled) and returns its raw JSON response.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -137,33 +137,10 @@
     },
     "kind": "http",
     "target": {
-      "url": "http://localhost:1234/v1/chat/completions",
+      "url": "http://localhost:8081/v1/chat/completions",
       "method": "POST",
       "body": {
-        "model": "google/gemma-4-e4b",
-        "messages": [
-          { "role": "user", "content": "{prompt}" }
-        ]
-      }
-    }
-  },
-  {
-    "name": "ask_mistral",
-    "description": "Sends a prompt to a local mistral:latest model running in Ollama and returns its raw JSON response.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "prompt": { "type": "string", "description": "The user prompt to send." }
-      },
-      "required": ["prompt"]
-    },
-    "kind": "http",
-    "target": {
-      "url": "http://localhost:11434/api/chat",
-      "method": "POST",
-      "body": {
-        "model": "mistral:latest",
-        "stream": false,
+        "model": "gemma-vision",
         "messages": [
           { "role": "user", "content": "{prompt}" }
         ]

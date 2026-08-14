@@ -70,7 +70,6 @@ public class DemoBackend {
 
         ObjectNode body = JsonNodeFactory.instance.objectNode();
         body.put("model", "gemma-vision");
-        body.put("reasoning_effort", "none");
         ArrayNode messages = body.putArray("messages");
         ObjectNode message = messages.addObject();
         message.put("role", "user");
@@ -80,7 +79,7 @@ public class DemoBackend {
         imageBlock.put("type", "image_url");
         imageBlock.putObject("image_url").put("url", "data:image/" + extension + ";base64," + imageData);
 
-        URL url = URI.create("http://localhost:1234/v1/chat/completions").toURL();
+        URL url = URI.create("http://localhost:8081/v1/chat/completions").toURL();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
