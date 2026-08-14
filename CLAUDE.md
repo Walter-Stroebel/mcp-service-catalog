@@ -19,6 +19,29 @@ Same rules as every other Java project of Walter's, not repo-specific:
 - Javadoc only where the code can't speak for itself (class role/lifecycle,
   non-obvious contracts) — not on getters/setters or self-explanatory code.
 
+## Core principle: config, not code
+
+This is the reason d'etre for the entire project — read this before adding
+any tool or extending an `Invoker`.
+
+The server's tool roster and each tool's behavior belong in `tools.json`,
+not in bespoke Java. If a new tool's behavior can be expressed with the
+existing `method`/`process`/`http`/`launch` invokers, it MUST be, even if
+that means extending an `Invoker` to close a real gap (see `HttpInvoker`'s
+`file_id` → `{file_base64}` resolution, added specifically so an
+image-plus-question vision call could be plain JSON instead of a
+hand-written HTTP POST in Java). `DemoBackend` exists only for the literal
+demo methods (`add`/`echo`/`rollDice`) that exist to prove the `method`
+kind works at all — it is not a place to grow "one more special case"
+every time a new backend needs a slightly different HTTP call shape.
+`look_at_image` originally violated this (hardcoded URL, hardcoded JSON
+body, hand-rolled `HttpURLConnection` call, all in `DemoBackend`) purely
+because `HttpInvoker` had no way to inject file bytes into a template —
+not because vision calls are inherently different from an ImageMagick
+`process` call. They aren't: both are "run a local capability with these
+inputs, return the result," and the whole point of this project is that
+distinction should never require writing Java.
+
 ## What this project is
 
 Started as a hand-rolled MCP (Model Context Protocol) server built to learn

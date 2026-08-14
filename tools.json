@@ -112,18 +112,33 @@
   },
   {
     "name": "look_at_image",
-    "description": "Sends a previously uploaded image to the local vision-capable gemma-4-e4b model running in LM Studio, along with a question, and returns its answer. Reasoning/thinking is disabled so the model answers directly instead of emitting a chain-of-thought preamble. Upload the image via PUT /files on this server's file service (port given as the second startup argument, default 8765), then call this tool with the returned file_id — file bytes never travel through MCP tool-call arguments, avoiding a real bug where a large inline base64 argument stalls the calling model's own response stream; see MANUAL.md and docs/archive/2026-08-13-look-at-image-hang.md.",
+    "description": "Sends a previously uploaded image to the local vision-capable gemma-4-e4b model running in llama-server, along with a question, and returns its answer. Reasoning/thinking is disabled server-side (--reasoning off) so the model answers directly instead of emitting a chain-of-thought preamble. Upload the image via PUT /files on this server's file service (port given as the second startup argument, default 8765), then call this tool with the returned file_id — file bytes never travel through MCP tool-call arguments, avoiding a real bug where a large inline base64 argument stalls the calling model's own response stream; see MANUAL.md and docs/archive/2026-08-13-look-at-image-hang.md.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "file_id": { "type": "string", "description": "file_id returned by a prior upload to this server's file service." },
-        "image_ext": { "type": "string", "description": "File extension for the image, without the dot (e.g. \"png\", \"jpg\"). Defaults to \"jpg\"." },
+        "image_ext": { "type": "string", "description": "File extension for the image, without the dot (e.g. \"png\", \"jpg\")." },
         "question": { "type": "string", "description": "What to ask the model about the image." }
       },
-      "required": ["file_id", "question"]
+      "required": ["file_id", "image_ext", "question"]
     },
-    "kind": "method",
-    "target": "nl.infcomtec.mcpservicecatalog.DemoBackend#lookAtImage"
+    "kind": "http",
+    "target": {
+      "url": "http://localhost:8081/v1/chat/completions",
+      "method": "POST",
+      "body": {
+        "model": "gemma-vision",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              { "type": "text", "text": "{question}" },
+              { "type": "image_url", "image_url": { "url": "data:image/{image_ext};base64,{file_base64}" } }
+            ]
+          }
+        ]
+      }
+    }
   },
   {
     "name": "ask_gemma",

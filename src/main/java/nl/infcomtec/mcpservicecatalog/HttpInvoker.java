@@ -11,6 +11,10 @@ import java.net.URI;
 import java.net.URL;
 import java.net.HttpURLConnection;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Base64;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
@@ -24,10 +28,28 @@ import java.util.Map;
  *   is what a chat-completions call (LM Studio/Ollama, OpenAI-style
  *   /v1/chat/completions) needs, since the prompt has to go in the JSON
  *   body, not the URL.
+ *
+ * If the call arguments include "file_id", it is resolved through
+ * FileService to an on-disk path (same convention as ProcessInvoker) and
+ * exposed to the target template as {file_base64} — the file's bytes,
+ * base64-encoded — so a catalog entry can embed uploaded file contents
+ * (e.g. an image) into a JSON request body, such as an OpenAI-style
+ * vision chat-completions call's inline "data:...;base64,{file_base64}"
+ * image_url, entirely from tools.json with no bespoke Java needed.
  */
 public class HttpInvoker implements Invoker {
 
     public String invoke(CatalogEntry entry, Map<String, Object> arguments) throws Exception {
+        Map<String, Object> filled = new HashMap<String, Object>(arguments);
+        Object fileId = arguments.get("file_id");
+        if (fileId != null) {
+            Path resolved = Main.FILES.resolve(fileId.toString());
+            if (resolved == null) {
+                throw new IllegalArgumentException("Unknown file_id: " + fileId);
+            }
+            String base64 = Base64.getEncoder().encodeToString(Files.readAllBytes(resolved));
+            filled.put("file_base64", base64);
+        }
         JsonNode target = entry.target;
         String urlTemplate;
         String method;
@@ -42,7 +64,7 @@ public class HttpInvoker implements Invoker {
             bodyTemplate = target.has("body") ? target.get("body") : null;
         }
 
-        String urlText = TemplateSubstitution.fill(urlTemplate, arguments);
+        String urlText = TemplateSubstitution.fill(urlTemplate, filled);
         URL url = URI.create(urlText).toURL();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod(method);
@@ -50,7 +72,7 @@ public class HttpInvoker implements Invoker {
         if (bodyTemplate != null) {
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json");
-            String bodyText = fillJson(bodyTemplate, arguments).toString();
+            String bodyText = fillJson(bodyTemplate, filled).toString();
             OutputStream requestBody = connection.getOutputStream();
             try {
                 requestBody.write(bodyText.getBytes(StandardCharsets.UTF_8));
