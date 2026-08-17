@@ -63,6 +63,24 @@ This starts three things in the same process:
   rather than a `systemctl --user` unit — a user unit is invisible to a
   plain `systemctl status`/`journalctl` and just fragments where service
   state lives on the box for no real benefit on a single-user machine.
+
+  With no `User=` directive, systemd runs the unit as root. That means
+  `ExecStart`, `WorkingDirectory`, and the jar/`tools.json` it points at
+  **must** live under a root-owned path (e.g. `/usr/local/lib/<name>/`),
+  never a regular user's home directory or git checkout — otherwise
+  anything running as that user can overwrite the jar or `tools.json`
+  (which can itself define arbitrary `process`/`launch` tool entries) and
+  get root on the service's next restart. Build the jar, then install it:
+
+  ```bash
+  mvn package
+  sudo mkdir -p /usr/local/lib/mcp-service-catalog
+  sudo cp target/mcp-service-catalog-*-jar-with-dependencies.jar \
+      /usr/local/lib/mcp-service-catalog/mcp-service-catalog.jar
+  sudo cp tools.json /usr/local/lib/mcp-service-catalog/tools.json
+  sudo chown -R root:root /usr/local/lib/mcp-service-catalog
+  ```
+
   Example unit:
 
   ```ini
@@ -72,8 +90,9 @@ This starts three things in the same process:
 
   [Service]
   Type=simple
-  WorkingDirectory=/path/to/mcp-service-catalog
-  ExecStart=/usr/bin/java -jar /path/to/mcp-service-catalog.jar /path/to/tools.json 8765 8764
+  User=root
+  WorkingDirectory=/usr/local/lib/mcp-service-catalog
+  ExecStart=/usr/bin/java -jar /usr/local/lib/mcp-service-catalog/mcp-service-catalog.jar /usr/local/lib/mcp-service-catalog/tools.json 8765 8764
   Restart=on-failure
   RestartSec=5
   StandardInput=null
@@ -94,6 +113,19 @@ This starts three things in the same process:
   they're independent processes each with their own `FileService`
   instance (files uploaded to one are not visible to the other — see
   "File service" below).
+
+  ### Redeploying after a code change
+
+  Because the running jar lives outside the git checkout, a `git pull` +
+  rebuild doesn't take effect until it's reinstalled:
+
+  ```bash
+  mvn package
+  sudo cp target/mcp-service-catalog-*-jar-with-dependencies.jar \
+      /usr/local/lib/mcp-service-catalog/mcp-service-catalog.jar
+  sudo cp tools.json /usr/local/lib/mcp-service-catalog/tools.json  # if changed
+  sudo systemctl restart mcp-service-catalog.service
+  ```
 
 ## Wiring up a client
 
